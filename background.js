@@ -41,8 +41,6 @@ const runtimeHandler = (message, sender, sendResponse) => {
         .then((response) => {
           const { data } = response;
 
-          console.log(data);
-
           tabData.analysed = true;
 
           let dataList = [];
@@ -85,13 +83,14 @@ const runtimeHandler = (message, sender, sendResponse) => {
               });
             } else if (tabStats.malicious > 0) {
               tabData["malicious"] = true;
+
               chrome.tabs.query(
                 { currentWindow: true, active: true },
                 (tabs) => {
                   const key = tabs[0]?.url;
 
                   chrome.storage.session.set({
-                    [key]: { tabStats },
+                    [key]: { tabStats, tabData },
                   });
                 }
               );

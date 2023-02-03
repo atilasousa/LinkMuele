@@ -6,24 +6,27 @@ function printData(data) {
   document.querySelector(
     ".phishing__number"
   ).innerHTML = `${data.tabStats.phishing}`;
-  document.querySelector(".phishing").innerHTML =
-    "empresas classificaram está página como phishing";
+  document.querySelector(".phishing").innerHTML = `${
+    data.tabStats.malicious > 1 ? "empresas" : "empresa"
+  } classificaram está página como phishing`;
   document.querySelector(
     ".malicious__number"
   ).innerHTML = `${data.tabStats.malicious}`;
-  document.querySelector(".malicious").innerHTML =
-    "empresas classificaram está página como malicioso";
+  document.querySelector(".malicious").innerHTML = `${
+    data.tabStats.malicious > 1 ? "empresas" : "empresa"
+  } classificaram está página como malicioso`;
 }
 
-function printMalicious() {
+function printMaliciousData(data) {
   document.querySelector(".lds-ring").remove();
   document.querySelector(".data__phishing").remove();
   document.querySelector(".data__safe").remove();
   document.querySelector(
     ".malicious__number"
   ).innerHTML = `${data.tabStats.malicious}`;
-  document.querySelector(".malicious").innerHTML =
-    "empresas classificaram está página como malicioso";
+  document.querySelector(".malicious").innerHTML = `${
+    data.tabStats.malicious > 1 ? "empresas" : "empresa"
+  } classificaram está página como malicioso`;
 }
 
 function printSafeData() {
@@ -38,13 +41,14 @@ chrome.storage.session.get(function (result) {
   if (Object.keys(result).length != 0) {
     chrome.tabs.query({ currentWindow: true, active: true }, function (tabs) {
       const urlKey = tabs[0].url;
+      console.log(result);
 
       if (Object.keys(result).includes(urlKey)) {
         data = result[urlKey];
-        if (result[urlKey].tabStats.malicious) {
-          printMalicious(data);
-        } else {
+        if (!result[urlKey].tabData.malicious) {
           printData(data);
+        } else {
+          printMaliciousData(data);
         }
       } else {
         printSafeData();

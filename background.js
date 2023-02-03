@@ -9,38 +9,100 @@ const options = {
 
 const accessedTabs = [];
 
+const checkIfTabExist = (tabUrl) =>
+  accessedTabs.find((tab) => tab.name === tabUrl);
+
 const runtimeHandler = (message, sender, sendResponse) => {
-  if (message.type === "runtime") {
-    const tabId = sender.tab.id;
-    const { signal, abort } = new AbortController();
+  const tabId = sender.tab.id;
+  const tabHref = new URL(message?.url).href;
 
-    const url = new URL(message.url);
+  if (!checkIfTabExist(tabHref) || !checkIfTabExist(tabHref).analysed) {
+    if (message.type === "runtime") {
+      const { signal, abort } = new AbortController();
 
-    const urlBase64 = btoa(url.href).replace(/=\s*$/, "");
+      const url = new URL(message.url);
 
-    console.log(urlBase64);
+      const urlBase64 = btoa(url.href).replace(/^\=+|\=+$/g, "");
 
-    const tabData = {
-      name: url.href,
-      id: tabId,
-      analysed: false,
-      abort,
-    };
+      const tabData = {
+        name: url.href,
+        id: tabId,
+        analysed: false,
+        abort,
+      };
 
-    fetch(`https://www.virustotal.com/api/v3/urls/${urlBase64}`, {
-      ...options,
-      signal,
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        tabData.analysed = true;
-        console.log(data);
-        console.log(accessedTabs);
+      fetch(`https://www.virustotal.com/api/v3/urls/${urlBase64}`, {
+        ...options,
+        signal,
       })
-      .catch(console.error);
+        .then((res) => res.json())
+        .then((response) => {
+          const { data } = response;
 
-    if (!accessedTabs.find((el) => el.name === tabData.name))
-      accessedTabs.push(tabData);
+          tabData.analysed = true;
+
+          let dataList = [];
+          let phishingData = {};
+          let tabStats = {};
+
+          if (response.data) {
+            dataList = Object.entries(data?.attributes?.last_analysis_results);
+
+            phishingData = Object.fromEntries(
+              dataList.filter(([_, { result }]) => result === "phishing")
+            );
+
+            tabStats = data?.attributes?.last_analysis_stats;
+
+            const tabAnalysis = {
+              tabStats,
+              phishingData,
+            };
+
+            if (phishingData) {
+              tabData["phishing"] = true;
+
+              chrome.action.setIcon({
+                tabId,
+                path: {
+                  32: "./assets/images/dangerIcon/32.png",
+                  16: "./assets/images/dangerIcon/16.png",
+                  48: "./assets/images/dangerIcon/48.png",
+                  128: "./assets/images/dangerIcon/128.png",
+                },
+              });
+
+              chrome.tabs.sendMessage(tabData.id, {
+                type: "tabDataAnalyses",
+                from: "background",
+                tabAnalysis,
+              });
+            }
+          }
+        })
+        .catch((error) => {
+          tabData.analysed = false;
+          console.error(error);
+        });
+
+      if (!accessedTabs.find((el) => el.name === tabData.name))
+        accessedTabs.push(tabData);
+
+      console.log("accessedTabs", accessedTabs);
+      return true;
+    }
+  } else return;
+
+  if (checkIfTabExist(tabHref && checkIfTabExist(tabHref).phishing)) {
+    chrome.action.setIcon({
+      tabId,
+      path: {
+        32: "./assets/images/dangerIcon/32.png",
+        16: "./assets/images/dangerIcon/16.png",
+        48: "./assets/images/dangerIcon/48.png",
+        128: "./assets/images/dangerIcon/128.png",
+      },
+    });
   }
 };
 
@@ -52,8 +114,6 @@ const removeTabHandler = function (tabId, removed) {
     if (!removedTab.analysed) removedTab.abort();
     accessedTabs.splice(index, 1);
   }
-
-  console.log(accessedTabs);
 };
 
 chrome.runtime.onMessage.removeListener(runtimeHandler);

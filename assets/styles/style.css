@@ -21,6 +21,14 @@ body .main .title h1:first-child {
 body .main .title h1:last-child {
   color: #e9c46a;
 }
+body .main .data {
+  margin-bottom: 1rem;
+}
+body .main .phishing__number,
+body .main .malicious__number {
+  color: #d62828;
+  font-weight: bold;
+}
 
 .lds-ring {
   position: relative;

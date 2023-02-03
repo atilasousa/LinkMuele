@@ -7,6 +7,8 @@ const options = {
   },
 };
 
+chrome.storage.session.clear();
+
 const accessedTabs = [];
 
 const checkIfTabExist = (tabUrl) =>
@@ -48,19 +50,27 @@ const runtimeHandler = (message, sender, sendResponse) => {
           if (response.data) {
             dataList = Object.entries(data?.attributes?.last_analysis_results);
 
+            tabStats = data?.attributes?.last_analysis_stats;
+
             phishingData = Object.fromEntries(
               dataList.filter(([_, { result }]) => result === "phishing")
             );
 
-            tabStats = data?.attributes?.last_analysis_stats;
-
-            const tabAnalysis = {
-              tabStats,
-              phishingData,
-            };
-
-            if (phishingData) {
+            if (Object.keys(phishingData).length != 0) {
               tabData["phishing"] = true;
+
+              tabStats["phishing"] = Object.keys(phishingData).length;
+
+              chrome.tabs.query(
+                { currentWindow: true, active: true },
+                (tabs) => {
+                  const key = tabs[0]?.url;
+
+                  chrome.storage.session.set({
+                    [key]: { tabData, phishingData, tabStats },
+                  });
+                }
+              );
 
               chrome.action.setIcon({
                 tabId,
@@ -70,12 +80,6 @@ const runtimeHandler = (message, sender, sendResponse) => {
                   48: "./assets/images/dangerIcon/48.png",
                   128: "./assets/images/dangerIcon/128.png",
                 },
-              });
-
-              chrome.tabs.sendMessage(tabData.id, {
-                type: "tabDataAnalyses",
-                from: "background",
-                tabAnalysis,
               });
             }
           }
@@ -88,7 +92,6 @@ const runtimeHandler = (message, sender, sendResponse) => {
       if (!accessedTabs.find((el) => el.name === tabData.name))
         accessedTabs.push(tabData);
 
-      console.log("accessedTabs", accessedTabs);
       return true;
     }
   } else return;

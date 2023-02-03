@@ -15,6 +15,17 @@ function printData(data) {
     "empresas classificaram está página como malicioso";
 }
 
+function printMalicious() {
+  document.querySelector(".lds-ring").remove();
+  document.querySelector(".data__phishing").remove();
+  document.querySelector(".data__safe").remove();
+  document.querySelector(
+    ".malicious__number"
+  ).innerHTML = `${data.tabStats.malicious}`;
+  document.querySelector(".malicious").innerHTML =
+    "empresas classificaram está página como malicioso";
+}
+
 function printSafeData() {
   document.querySelector(".lds-ring").remove();
   document.querySelector(".data__phishing").remove();
@@ -30,7 +41,11 @@ chrome.storage.session.get(function (result) {
 
       if (Object.keys(result).includes(urlKey)) {
         data = result[urlKey];
-        printData(data);
+        if (result[urlKey].tabStats.malicious) {
+          printMalicious(data);
+        } else {
+          printData(data);
+        }
       } else {
         printSafeData();
       }

@@ -41,6 +41,8 @@ const runtimeHandler = (message, sender, sendResponse) => {
         .then((response) => {
           const { data } = response;
 
+          console.log(data);
+
           tabData.analysed = true;
 
           let dataList = [];
@@ -79,6 +81,28 @@ const runtimeHandler = (message, sender, sendResponse) => {
                   16: "./assets/images/dangerIcon/16.png",
                   48: "./assets/images/dangerIcon/48.png",
                   128: "./assets/images/dangerIcon/128.png",
+                },
+              });
+            } else if (tabStats.malicious > 0) {
+              tabData["malicious"] = true;
+              chrome.tabs.query(
+                { currentWindow: true, active: true },
+                (tabs) => {
+                  const key = tabs[0]?.url;
+
+                  chrome.storage.session.set({
+                    [key]: { tabStats },
+                  });
+                }
+              );
+
+              chrome.action.setIcon({
+                tabId,
+                path: {
+                  32: "./assets/images/warningIcon/32.png",
+                  16: "./assets/images/warningIcon/16.png",
+                  48: "./assets/images/warningIcon/48.png",
+                  128: "./assets/images/warningIcon/128.png",
                 },
               });
             }

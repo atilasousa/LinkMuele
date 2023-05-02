@@ -11,10 +11,29 @@ chrome.storage.session.clear();
 
 const accessedTabs = [];
 
+let currentTab = null;
+
+function sendNotificationToUser(message) {
+  chrome.notifications.create({
+    type: "basic",
+    iconUrl: "./assets/images/dangerIcon/128.png",
+    title: "Perigo",
+    message,
+  });
+  console.log("notification sent");
+}
+
+function sendMessageToOpenModal() {
+  chrome.tabs.query({ currentWindow: true, active: true }, function (tabs) {
+    chrome.tabs.sendMessage(tabs[0]?.id, { action: "open_modal" });
+  });
+}
+
 const checkIfTabExist = (tabUrl) =>
   accessedTabs.find((tab) => tab.name === tabUrl);
 
 const runtimeHandler = (message, sender, sendResponse) => {
+  console.log(accessedTabs);
   const tabId = sender.tab.id;
   const tabHref = new URL(message?.url).href;
 
@@ -41,10 +60,14 @@ const runtimeHandler = (message, sender, sendResponse) => {
         .then((response) => {
           const { data } = response;
 
+          console.log(data);
+
           tabData.analysed = true;
 
           let dataList = [];
           let phishingData = {};
+          let maliciousData = {};
+          let malwareData = {};
           let tabStats = {};
 
           if (response.data) {
@@ -53,24 +76,50 @@ const runtimeHandler = (message, sender, sendResponse) => {
             tabStats = data?.attributes?.last_analysis_stats;
 
             phishingData = Object.fromEntries(
-              dataList.filter(([_, { result }]) => result === "phishing")
+              dataList.filter(([_, { result }]) =>
+                result.toLowerCase().includes("phishing")
+              )
+            );
+
+            malwareData = Object.fromEntries(
+              dataList.filter(([_, { result }]) =>
+                result.toLowerCase().includes("malware")
+              )
+            );
+
+            maliciousData = Object.fromEntries(
+              dataList.filter(([_, { result }]) =>
+                result.toLowerCase().includes("malicious")
+              )
             );
 
             if (Object.keys(phishingData).length != 0) {
               tabData["phishing"] = true;
+              console.log("phishing");
 
               tabStats["phishing"] = Object.keys(phishingData).length;
 
-              chrome.tabs.query(
-                { currentWindow: true, active: true },
-                (tabs) => {
+              tabStats["malicious"] = Object.keys(maliciousData).length;
+
+              chrome.windows.getCurrent((w) => {
+                chrome.tabs.query({ windowId: w.id, active: true }, (tabs) => {
                   const key = tabs[0]?.url;
 
+                  sendMessageToOpenModal();
+
                   chrome.storage.session.set({
-                    [key]: { tabData, phishingData, tabStats },
+                    [key]: {
+                      tabData,
+                      phishingData,
+                      malwareData,
+                      tabStats,
+                      maliciousData,
+                    },
                   });
-                }
-              );
+                });
+              });
+
+              sendNotificationToUser(`Alerta de phishing em ${url.href}!`);
 
               chrome.action.setIcon({
                 tabId,
@@ -83,14 +132,17 @@ const runtimeHandler = (message, sender, sendResponse) => {
               });
             } else if (tabStats.malicious > 0) {
               tabData["malicious"] = true;
+              console.log("malicious");
 
               chrome.tabs.query(
                 { currentWindow: true, active: true },
                 (tabs) => {
                   const key = tabs[0]?.url;
 
+                  sendMessageToOpenModal();
+
                   chrome.storage.session.set({
-                    [key]: { tabStats, tabData },
+                    [key]: { tabStats, tabData, malwareData, maliciousData },
                   });
                 }
               );
@@ -104,6 +156,17 @@ const runtimeHandler = (message, sender, sendResponse) => {
                   128: "./assets/images/warningIcon/128.png",
                 },
               });
+            } else if (tabStats.malicious === 0 && tabStats.harmless > 0) {
+              console.log("safe");
+              chrome.action.setIcon({
+                tabId,
+                path: {
+                  16: "./assets/images/safeIcon/16.png",
+                  32: "./assets/images/safeIcon/32.png",
+                  48: "./assets/images/safeIcon/48.png",
+                  128: "./assets/images/safeIcon/128.png",
+                },
+              });
             }
           }
         })
@@ -112,23 +175,49 @@ const runtimeHandler = (message, sender, sendResponse) => {
           console.error(error);
         });
 
-      if (!accessedTabs.find((el) => el.name === tabData.name))
+      if (!accessedTabs.find((el) => el.name === tabData.name)) {
         accessedTabs.push(tabData);
+      }
 
       return true;
     }
-  } else return;
+  }
 
-  if (checkIfTabExist(tabHref && checkIfTabExist(tabHref).phishing)) {
-    chrome.action.setIcon({
-      tabId,
-      path: {
-        32: "./assets/images/dangerIcon/32.png",
-        16: "./assets/images/dangerIcon/16.png",
-        48: "./assets/images/dangerIcon/48.png",
-        128: "./assets/images/dangerIcon/128.png",
-      },
-    });
+  if (checkIfTabExist(tabHref)) {
+    const { phishing, malicious } = checkIfTabExist(tabHref);
+    if (phishing) {
+      sendMessageToOpenModal();
+      chrome.action.setIcon({
+        tabId,
+        path: {
+          16: "./assets/images/dangerIcon/16.png",
+          32: "./assets/images/dangerIcon/32.png",
+          48: "./assets/images/dangerIcon/48.png",
+          128: "./assets/images/dangerIcon/128.png",
+        },
+      });
+    } else if (malicious) {
+      sendMessageToOpenModal();
+      chrome.action.setIcon({
+        tabId,
+        path: {
+          16: "./assets/images/warningIcon/16.png",
+          32: "./assets/images/warningIcon/32.png",
+          48: "./assets/images/warningIcon/48.png",
+          128: "./assets/images/warningIcon/128.png",
+        },
+      });
+    } else {
+      chrome.action.setIcon({
+        tabId,
+        path: {
+          16: "./assets/images/safeIcon/16.png",
+          32: "./assets/images/safeIcon/32.png",
+          48: "./assets/images/safeIcon/48.png",
+          128: "./assets/images/safeIcon/128.png",
+        },
+      });
+    }
   }
 };
 
@@ -141,6 +230,16 @@ const removeTabHandler = function (tabId, removed) {
     accessedTabs.splice(index, 1);
   }
 };
+
+function sendMessageToContentScript(tabId, message) {
+  chrome.tabs.sendMessage(tabId, message);
+}
+
+chrome.action.onClicked.addListener((tab) => {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    sendMessageToContentScript(tabs[0].id, { action: "open_modal" });
+  });
+});
 
 chrome.runtime.onMessage.removeListener(runtimeHandler);
 

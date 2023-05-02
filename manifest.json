@@ -5,7 +5,7 @@
   "manifest_version": 3,
   "action": {
     "default_title": "LinkMuele",
-    "default_popup": "popup.html"
+    "browser_action": {}
   },
   "icons": {
     "32": "./assets/images/icon/32.png",
@@ -16,10 +16,16 @@
   "background": {
     "service_worker": "background.js"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["*.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "exclude_globs": ["*://*.google.com/*"],
+      "exclude_globs": ["*://*.google.com/*", "http://localhost:*/*"],
       "js": ["content.js"]
     }
   ],

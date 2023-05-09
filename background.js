@@ -20,7 +20,6 @@ function sendNotificationToUser(message) {
     title: "Perigo",
     message,
   });
-  console.log("notification sent");
 }
 
 function sendMessageToOpenModal() {
@@ -33,7 +32,6 @@ const checkIfTabExist = (tabUrl) =>
   accessedTabs.find((tab) => tab.name === tabUrl);
 
 const runtimeHandler = (message, sender, sendResponse) => {
-  console.log(accessedTabs);
   const tabId = sender.tab.id;
   const tabHref = new URL(message?.url).href;
 
@@ -59,8 +57,6 @@ const runtimeHandler = (message, sender, sendResponse) => {
         .then((res) => res.json())
         .then((response) => {
           const { data } = response;
-
-          console.log(data);
 
           tabData.analysed = true;
 
@@ -95,7 +91,6 @@ const runtimeHandler = (message, sender, sendResponse) => {
 
             if (Object.keys(phishingData).length != 0) {
               tabData["phishing"] = true;
-              console.log("phishing");
 
               tabStats["phishing"] = Object.keys(phishingData).length;
 
@@ -132,7 +127,6 @@ const runtimeHandler = (message, sender, sendResponse) => {
               });
             } else if (tabStats.malicious > 0) {
               tabData["malicious"] = true;
-              console.log("malicious");
 
               chrome.tabs.query(
                 { currentWindow: true, active: true },
@@ -157,7 +151,6 @@ const runtimeHandler = (message, sender, sendResponse) => {
                 },
               });
             } else if (tabStats.malicious === 0 && tabStats.harmless > 0) {
-              console.log("safe");
               chrome.action.setIcon({
                 tabId,
                 path: {

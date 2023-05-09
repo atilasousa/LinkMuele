@@ -1,4 +1,5 @@
 let data = null;
+let webSiteCategories = null;
 const summarysContentIds = ["phishing", "malicious", "malware"];
 
 function newLi(innerContent) {
@@ -20,13 +21,30 @@ function generateList(object) {
   return newUl;
 }
 
+function printCategories() {
+  document.getElementById("category").style.display = `block`;
+  document.getElementById(
+    "category"
+  ).innerHTML = `Categorias: ${webSiteCategories}`;
+  document.getElementById("detailsTitle").style.display = "block";
+}
+
 function printData(data) {
-  console.log("data", data);
+  webSiteCategories = [
+    ...new Set(
+      Object.keys(data.phishingData).map(
+        (key) => data.phishingData[key].category
+      )
+    ),
+  ];
+
   document.getElementById("alert_logo").classList.add("phishing");
 
   document.getElementById("icon").src = "./assets/images/dangerIcon/128.png";
 
   document.getElementById("alert_text").innerHTML = "ALERTA PHISHING";
+
+  document.getElementById("reportButton").classList.add("phishing");
 
   for (const element of summarysContentIds) {
     const el = document.getElementById(element);
@@ -46,7 +64,14 @@ function printData(data) {
 }
 
 function printMaliciousData(data) {
-  console.log(data);
+  webSiteCategories = [
+    ...new Set(
+      Object.keys(data.maliciousData).map(
+        (key) => data.maliciousData[key].category
+      )
+    ),
+  ];
+
   document.getElementById("alert_logo").classList.add("warning");
 
   document.getElementById("icon").src = "./assets/images/warningIcon/128.png";
@@ -69,7 +94,6 @@ function printMaliciousData(data) {
       Object.keys(data.malwareData).length != 0 &&
       element === "malware"
     ) {
-      console.log("malwareData");
       elTitle.innerHTML = `Empresas que classificaram como malware`;
       el.appendChild(generateList(data.malwareData));
     }
@@ -99,7 +123,6 @@ document.getElementById("close_button").addEventListener("click", () => {
 });
 
 chrome.storage.session.get(function (result) {
-  console.log(result);
   if (Object.keys(result).length != 0) {
     chrome.tabs.query({ currentWindow: true, active: true }, function (tabs) {
       const urlKey = tabs[0].url;
@@ -131,7 +154,7 @@ function hideInitComponent() {
 function showFullReport() {
   const detailsHolder = document.getElementsByClassName("details_holder");
 
-  document.getElementById("category").style.display = "block";
+  if (webSiteCategories.length > 0) printCategories();
 
   if (data.phishingData) {
     detailsHolder[0].style.display = "block";

@@ -110,8 +110,10 @@ body .main .info {
   padding: 2.5rem 1.2rem 1.2rem;
   position: relative;
 }
-body .main .info .category {
+body .main .info .category,
+body .main .info .detailsTitle {
   display: none;
+  margin-bottom: 1rem;
 }
 body .main .info .close_button {
   position: fixed;
@@ -174,7 +176,6 @@ body .main .info .reportButton button {
   border-radius: 1rem;
   padding: 0.6rem 3rem;
   border-radius: 0.25rem;
-  background-color: #e63946;
   transition: all 0.3s ease-in-out;
 }
 body .main .info .reportButton button:hover {

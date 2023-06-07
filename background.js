@@ -1,4 +1,8 @@
-const options = {
+const DB_NAME = "analysedURLs";
+const DB_VERSION = 1;
+let db;
+
+const optionsVirusTotal = {
   method: "GET",
   headers: {
     accept: "application/json",
@@ -7,166 +11,176 @@ const options = {
   },
 };
 
-chrome.storage.session.clear();
+function openDatabase() {
+  return new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(DB_NAME, DB_VERSION);
 
-const accessedTabs = [];
+    request.onerror = (event) => {
+      console.error("error opening the database:", event.target.error);
+      reject(event.target.error);
+    };
 
-let currentTab = null;
+    request.onsuccess = (event) => {
+      db = event.target.result;
+      resolve();
+    };
 
-function sendNotificationToUser(message) {
-  chrome.notifications.create({
-    type: "basic",
-    iconUrl: "./assets/images/dangerIcon/128.png",
-    title: "Perigo",
-    message,
+    request.onupgradeneeded = (event) => {
+      db = event.target.result;
+      db.createObjectStore("urls", { keyPath: "name" });
+    };
   });
 }
 
-function sendMessageToOpenModal() {
+async function saveURLToDB(tabData) {
+  const transaction = db.transaction(["urls"], "readwrite");
+  const store = transaction.objectStore("urls");
+
+  return new Promise((resolve, reject) => {
+    const request = store.add(tabData);
+
+    request.onerror = (event) => {
+      console.error(
+        "Error when saving the URL in IndexedDB:",
+        event.target.error
+      );
+      reject(event.target.error);
+    };
+
+    request.onsuccess = () => {
+      resolve();
+    };
+  });
+}
+
+async function checkIfTabExist(tabUrl) {
+  const transaction = db.transaction(["urls"], "readonly");
+  const store = transaction.objectStore("urls");
+
+  return new Promise((resolve, reject) => {
+    const request = store.get(tabUrl);
+
+    request.onerror = (event) => {
+      console.error(
+        "Error when fetching the URL from IndexedDB:",
+        event.target.error
+      );
+      reject(event.target.error);
+    };
+
+    request.onsuccess = (event) => {
+      resolve(event.target.result);
+    };
+  });
+}
+
+const setIcon = (tabId, type) => {
+  chrome.action.setIcon({
+    tabId,
+    path: {
+      16: `./assets/images/${type}/16.png`,
+      32: `./assets/images/${type}/32.png`,
+      48: `./assets/images/${type}/48.png`,
+      128: `./assets/images/${type}/128.png`,
+    },
+  });
+};
+
+function sendMessageToOpenModal(tabId) {
   chrome.tabs.query({ currentWindow: true, active: true }, function (tabs) {
     chrome.tabs.sendMessage(tabs[0]?.id, { action: "open_modal" });
   });
 }
 
-const checkIfTabExist = (tabUrl) =>
-  accessedTabs.find((tab) => tab.name === tabUrl);
-
-const runtimeHandler = (message, sender, sendResponse) => {
+const runtimeHandler = async (message, sender, sendResponse) => {
   const tabId = sender.tab.id;
   const tabHref = new URL(message?.url).href;
 
   if (!checkIfTabExist(tabHref) || !checkIfTabExist(tabHref).analysed) {
     if (message.type === "runtime") {
-      const { signal, abort } = new AbortController();
+      try {
+        const url = new URL(message.url);
+        const urlBase64 = btoa(url.href).replace(/^\=+|\=+$/g, "");
+        const { signal, abort } = new AbortController();
 
-      const url = new URL(message.url);
-
-      const urlBase64 = btoa(url.href).replace(/^\=+|\=+$/g, "");
-
-      const tabData = {
-        name: url.href,
-        id: tabId,
-        analysed: false,
-        abort,
-      };
-
-      fetch(`https://www.virustotal.com/api/v3/urls/${urlBase64}`, {
-        ...options,
-        signal,
-      })
-        .then((res) => res.json())
-        .then((response) => {
-          const { data } = response;
-
-          tabData.analysed = true;
-
-          let dataList = [];
-          let phishingData = {};
-          let maliciousData = {};
-          let malwareData = {};
-          let tabStats = {};
-
-          if (response.data) {
-            dataList = Object.entries(data?.attributes?.last_analysis_results);
-
-            tabStats = data?.attributes?.last_analysis_stats;
-
-            phishingData = Object.fromEntries(
-              dataList.filter(([_, { result }]) =>
-                result.toLowerCase().includes("phishing")
-              )
-            );
-
-            malwareData = Object.fromEntries(
-              dataList.filter(([_, { result }]) =>
-                result.toLowerCase().includes("malware")
-              )
-            );
-
-            maliciousData = Object.fromEntries(
-              dataList.filter(([_, { result }]) =>
-                result.toLowerCase().includes("malicious")
-              )
-            );
-
-            if (Object.keys(phishingData).length != 0) {
-              tabData["phishing"] = true;
-
-              tabStats["phishing"] = Object.keys(phishingData).length;
-
-              tabStats["malicious"] = Object.keys(maliciousData).length;
-
-              chrome.windows.getCurrent((w) => {
-                chrome.tabs.query({ windowId: w.id, active: true }, (tabs) => {
-                  const key = tabs[0]?.url;
-
-                  sendMessageToOpenModal();
-
-                  chrome.storage.session.set({
-                    [key]: {
-                      tabData,
-                      phishingData,
-                      malwareData,
-                      tabStats,
-                      maliciousData,
-                    },
-                  });
-                });
-              });
-
-              sendNotificationToUser(`Alerta de phishing em ${url.href}!`);
-
-              chrome.action.setIcon({
-                tabId,
-                path: {
-                  32: "./assets/images/dangerIcon/32.png",
-                  16: "./assets/images/dangerIcon/16.png",
-                  48: "./assets/images/dangerIcon/48.png",
-                  128: "./assets/images/dangerIcon/128.png",
-                },
-              });
-            } else if (tabStats.malicious > 0) {
-              tabData["malicious"] = true;
-
-              chrome.tabs.query(
-                { currentWindow: true, active: true },
-                (tabs) => {
-                  const key = tabs[0]?.url;
-
-                  sendMessageToOpenModal();
-
-                  chrome.storage.session.set({
-                    [key]: { tabStats, tabData, malwareData, maliciousData },
-                  });
-                }
-              );
-
-              chrome.action.setIcon({
-                tabId,
-                path: {
-                  32: "./assets/images/warningIcon/32.png",
-                  16: "./assets/images/warningIcon/16.png",
-                  48: "./assets/images/warningIcon/48.png",
-                  128: "./assets/images/warningIcon/128.png",
-                },
-              });
-            } else if (tabStats.malicious === 0 && tabStats.harmless > 0) {
-              chrome.action.setIcon({
-                tabId,
-                path: {
-                  16: "./assets/images/safeIcon/16.png",
-                  32: "./assets/images/safeIcon/32.png",
-                  48: "./assets/images/safeIcon/48.png",
-                  128: "./assets/images/safeIcon/128.png",
-                },
-              });
-            }
+        const response = await fetch(
+          `https://www.virustotal.com/api/v3/urls/${urlBase64}`,
+          {
+            ...options,
+            signal,
           }
-        })
-        .catch((error) => {
-          tabData.analysed = false;
-          console.error(error);
-        });
+        );
+
+        const { data, error } = await response.json();
+
+        if (error) {
+          return;
+        }
+
+        const tabData = {
+          name: url.href,
+          id: tabId,
+          analysed: true,
+          abort,
+        };
+
+        const dataList = Object.entries(
+          data?.attributes?.last_analysis_results
+        );
+        const tabStats = data?.attributes?.last_analysis_stats;
+
+        const filterData = (category) =>
+          Object.fromEntries(
+            dataList.filter(([_, { result }]) =>
+              result.toLowerCase().includes(category)
+            )
+          );
+
+        const phishingData = filterData("phishing");
+        const malwareData = filterData("malware");
+        const maliciousData = filterData("malicious");
+
+        if (Object.keys(phishingData).length) {
+          tabData["phishing"] = true;
+          tabStats["phishing"] = Object.keys(phishingData).length;
+
+          chrome.windows.getCurrent((w) => {
+            chrome.tabs.query({ windowId: w.id, active: true }, (tabs) => {
+              const key = tabs[0]?.url;
+              sendMessageToOpenModal();
+              chrome.storage.local.set({
+                [key]: {
+                  tabData,
+                  phishingData,
+                  malwareData,
+                  tabStats,
+                  maliciousData,
+                },
+              });
+            });
+          });
+
+          sendNotificationToUser(`Alerta de phishing em ${url.href}!`);
+
+          setIcon(tabId, "dangerIcon");
+        } else if (tabStats.malicious > 0) {
+          tabData["malicious"] = true;
+
+          chrome.tabs.query({ currentWindow: true, active: true }, (tabs) => {
+            const key = tabs[0]?.url;
+            sendMessageToOpenModal();
+            chrome.storage.local.set({
+              [key]: { tabStats, tabData, malwareData, maliciousData },
+            });
+          });
+
+          setIcon(tabId, "warningIcon");
+        } else if (tabStats.malicious === 0 && tabStats.harmless > 0) {
+          setIcon(tabId, "safeIcon");
+        }
+      } catch (error) {
+        console.error(error);
+      }
 
       if (!accessedTabs.find((el) => el.name === tabData.name)) {
         accessedTabs.push(tabData);
@@ -180,57 +194,33 @@ const runtimeHandler = (message, sender, sendResponse) => {
     const { phishing, malicious } = checkIfTabExist(tabHref);
     if (phishing) {
       sendMessageToOpenModal();
-      chrome.action.setIcon({
-        tabId,
-        path: {
-          16: "./assets/images/dangerIcon/16.png",
-          32: "./assets/images/dangerIcon/32.png",
-          48: "./assets/images/dangerIcon/48.png",
-          128: "./assets/images/dangerIcon/128.png",
-        },
-      });
+      setIcon(tabId, "dangerIcon");
     } else if (malicious) {
       sendMessageToOpenModal();
-      chrome.action.setIcon({
-        tabId,
-        path: {
-          16: "./assets/images/warningIcon/16.png",
-          32: "./assets/images/warningIcon/32.png",
-          48: "./assets/images/warningIcon/48.png",
-          128: "./assets/images/warningIcon/128.png",
-        },
-      });
+      setIcon(tabId, "warningIcon");
     } else {
-      chrome.action.setIcon({
-        tabId,
-        path: {
-          16: "./assets/images/safeIcon/16.png",
-          32: "./assets/images/safeIcon/32.png",
-          48: "./assets/images/safeIcon/48.png",
-          128: "./assets/images/safeIcon/128.png",
-        },
-      });
+      setIcon(tabId, "safeIcon");
     }
   }
 };
 
-const removeTabHandler = function (tabId, removed) {
+const removeTabHandler = (tabId, removed) => {
   const index = accessedTabs.findIndex((tab) => tab.id === tabId);
-  const removedTab = accessedTabs.find((el) => el.id === tabId);
 
-  if (removedTab) {
+  if (index !== -1) {
+    const removedTab = accessedTabs[index];
     if (!removedTab.analysed) removedTab.abort();
     accessedTabs.splice(index, 1);
   }
 };
 
-function sendMessageToContentScript(tabId, message) {
+const sendMessageToContentScript = (tabId, message) => {
   chrome.tabs.sendMessage(tabId, message);
-}
+};
 
-chrome.action.onClicked.addListener((tab) => {
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    sendMessageToContentScript(tabs[0].id, { action: "open_modal" });
+chrome.action.onClicked.addListener(() => {
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    sendMessageToContentScript(tab.id, { action: "open_modal" });
   });
 });
 

@@ -25,7 +25,34 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "exclude_globs": ["*://*.google.com/*", "http://localhost:*/*"],
+      "exclude_globs": [
+        "*://*.google.com/*",
+        "http://localhost:*/*",
+        "*://*.facebook.com/*",
+        "*://*.instagram.com/*",
+        "*://*.whatsapp.com/*",
+        "*://*.telegram.com/*",
+        "*://*.virustotal.com/*",
+        "*://*.amazon.com/*",
+        "*://*.pinterest.com/*",
+        "*://*.apple.com/*",
+        "*://*.microsoft.com/*",
+        "*://*.vuejs.com/*",
+        "*://*.linkedin.com/*",
+        "*://*.twitter.com/*",
+        "*://*.netflix.com/*",
+        "*://*.paypal.com/*",
+        "*://*.youtube.com/*",
+        "*://*.github.com/*",
+        "*://*.bitbucket.com/*",
+        "*://*.adobe.com/*",
+        "*://*.wikipedia.com/*",
+        "*://*.zoom.com/*",
+        "*://*.spotify.com/*",
+        "*://*.evernote.com/*",
+        "*://*.trello.com/*",
+        "*://chat.openai.com/*"
+      ],
       "js": ["content.js"]
     }
   ],
